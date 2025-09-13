@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bihar Gramin Bank – Adopters Tracking System (Server‑Backed)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    html, body { height: 100%; }
+    .hidden-el { display:none; }
+    .pill { border-radius: 9999px; }
+    .card { border-radius: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    th, td { white-space: nowrap; }
+    .table-wrap { overflow: auto; max-height: 65vh; }
+    .btn { /* utility placeholder */ }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-50 via-emerald-50 to-white text-slate-800">
+  <header class="w-full border-b bg-white/70 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+      <div>
+        <h1 class="text-xl font-semibold">Bihar Gramin Bank – Adopters Tracking System</h1>
+        <p class="text-xs text-slate-500 -mt-1">Server‑backed • Centralized storage</p>
+      </div>
+      <div class="ml-auto flex gap-2 text-xs text-slate-500 items-center">
+        <span class="pill px-3 py-1 bg-slate-100">Single‑file HTML</span>
+        <span id="env-host" class="pill px-3 py-1 bg-slate-100">API: <span class="font-mono" id="env-api"></span></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <!-- Tabs -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <button id="tab-login" class="px-4 py-3 card bg-white border">1) Login</button>
+      <button id="tab-adopters" class="px-4 py-3 card bg-white border">Admin: Upload Adopters</button>
+      <button id="tab-params" class="px-4 py-3 card bg-white border">Admin: Upload Parameters</button>
+      <button id="tab-users" class="px-4 py-3 card bg-white border">Admin: Generate Users</button>
+      <button id="tab-reports" class="px-4 py-3 card bg-white border">Reports / Exports</button>
+    </div>
+
+    <!-- Login -->
+    <section id="panel-login" class="card bg-white p-5">
+      <h2 class="text-lg font-semibold mb-2">Login</h2>
+      <p class="text-xs text-slate-500">Default password = your User ID. Admin user/password: <b>MADHAV JHA</b></p>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <div>
+          <label class="text-sm font-medium">Role</label>
+          <select id="login-role" class="w-full border rounded p-2 text-sm">
+            <option value="RO">RO</option>
+            <option value="CM">CM</option>
+            <option value="HO">HO</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-medium">User ID</label>
+          <input id="login-user" class="w-full border rounded p-2 text-sm" placeholder="Enter User ID" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Password</label>
+          <input id="login-pass" type="password" class="w-full border rounded p-2 text-sm" />
+        </div>
+        <button id="btn-login" class="px-4 py-2 bg-emerald-600 text-white rounded">Sign in</button>
+        <span id="login-msg" class="text-sm"></span>
+      </div>
+
+      <div id="whoami" class="hidden-el mt-4 flex flex-wrap items-center gap-2 text-xs">
+        <span id="badge-role" class="pill px-3 py-1 bg-slate-100"></span>
+        <span id="badge-user" class="pill px-3 py-1 bg-slate-100"></span>
+        <span class="ml-auto">Today: <span id="badge-date"></span></span>
+      </div>
+
+      <div id="change-pass" class="hidden-el mt-4 flex gap-2 items-end">
+        <div>
+          <label class="text-xs">New password</label>
+          <input id="new-pass" type="password" class="border rounded p-2 text-sm" />
+        </div>
+        <button id="btn-set-pass" class="px-3 py-2 bg-slate-800 text-white rounded text-sm">Set Password</button>
+        <span id="pass-msg" class="text-xs text-emerald-700 hidden-el">Updated ✓</span>
+      </div>
+
+      <!-- RO Reporting -->
+      <div id="ro-reporting" class="hidden-el mt-6">
+        <h3 class="text-lg font-semibold">Daily Reporting (RO)</h3>
+        <div class="flex flex-wrap gap-2 items-center mt-2 text-sm">
+          <label>Date</label>
+          <input id="report-date" type="date" class="border rounded p-1" />
+          <button id="btn-load-my-branches" class="px-3 py-1.5 bg-slate-100 rounded">Load Branches</button>
+          <button id="btn-save-report" class="px-3 py-1.5 bg-sky-600 text-white rounded">Save Today’s Report</button>
+        </div>
+        <div id="report-table-wrap" class="table-wrap border rounded mt-3 hidden-el">
+          <table id="report-table" class="min-w-full text-sm"></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin: Upload Adopters -->
+    <section id="panel-adopters" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Admin – Upload Adopters Excel & Map</h2>
+      <p class="text-xs text-slate-500">Map columns from your Excel to system fields. Posting replaces the master mapping on the server.</p>
+      <div class="flex flex-wrap gap-3 items-center">
+        <input id="adopters-file" type="file" accept=".xlsx,.xls" class="text-sm"/>
+        <button id="btn-read-adopters" class="px-4 py-2 bg-sky-600 text-white rounded">Read Excel</button>
+        <span id="adopters-status" class="text-xs text-slate-500">No file.</span>
+      </div>
+      <div id="map-box" class="mt-5 hidden-el">
+        <h3 class="font-medium mb-2">Column Mapping</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div><label class="text-xs">RO USER ID</label><select id="map-ro-id" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">CM USER ID</label><select id="map-cm-id" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">HO USER ID</label><select id="map-ho-id" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">CM NAME</label><select id="map-cm-name" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">HO ADOPTER NAME</label><select id="map-ho-name" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">BRANCH NAME</label><select id="map-branch" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">BRANCH SOL</label><select id="map-sol" class="w-full border rounded p-2"></select></div>
+          <div><label class="text-xs">REGION</label><select id="map-region" class="w-full border rounded p-2"></select></div>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button id="btn-post-adopters" class="px-4 py-2 bg-emerald-600 text-white rounded">Post to Server</button>
+          <span id="post-adopters-msg" class="text-xs"></span>
+        </div>
+        <div class="mt-6">
+          <h4 class="font-medium mb-2">Preview (first 10 rows)</h4>
+          <div class="overflow-auto border rounded"><table id="adopters-preview" class="min-w-full text-sm"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin: Upload Parameters -->
+    <section id="panel-params" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Admin – Upload Daily Reporting Parameters</h2>
+      <p class="text-xs text-slate-500">Attach PARAMETERS.xlsx; first header row becomes fields (e.g., APY, JBY…). Posting replaces parameter set on server.</p>
+      <div class="flex flex-wrap gap-3 items-center">
+        <input id="params-file" type="file" accept=".xlsx,.xls" class="text-sm"/>
+        <button id="btn-read-params" class="px-4 py-2 bg-sky-600 text-white rounded">Read Parameters</button>
+        <span id="params-status" class="text-xs text-slate-500">No file.</span>
+      </div>
+      <div id="params-box" class="mt-5 hidden-el">
+        <h4 class="font-medium mb-2">Detected Fields</h4>
+        <div id="params-list" class="text-sm text-slate-700"></div>
+        <div class="mt-4 flex gap-2">
+          <button id="btn-post-params" class="px-4 py-2 bg-emerald-600 text-white rounded">Post to Server</button>
+          <span id="post-params-msg" class="text-xs"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin: Generate Users -->
+    <section id="panel-users" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Admin – Generate Users</h2>
+      <p class="text-xs text-slate-500">Creates RO/CM/HO users from the current adopters mapping. Default password = user id.</p>
+      <button id="btn-generate-users" class="px-4 py-2 bg-sky-600 text-white rounded">Generate Users on Server</button>
+      <span id="gen-users-msg" class="text-xs ml-2"></span>
+    </section>
+
+    <!-- Reports / Exports (role‑aware) -->
+    <section id="panel-reports" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Reports / Exports</h2>
+      <div class="flex flex-wrap gap-2 items-end text-sm">
+        <div id="date-controls" class="flex gap-2 items-end">
+          <div>
+            <label class="text-xs">From</label>
+            <input id="flt-from" type="date" class="border rounded p-1"/>
+          </div>
+          <div>
+            <label class="text-xs">To</label>
+            <input id="flt-to" type="date" class="border rounded p-1"/>
+          </div>
+        </div>
+        <div id="ho-today-note" class="hidden-el text-xs pill bg-slate-100 px-2 py-1">HO view is fixed to <b>today</b></div>
+        <div id="admin-scope" class="hidden-el flex gap-2 items-center">
+          <label class="text-xs">Admin Grouping</label>
+          <select id="scope" class="border rounded p-1">
+            <option value="RO">RO User-wise</option>
+            <option value="HO">HO User-wise</option>
+            <option value="CM">CM User-wise</option>
+          </select>
+        </div>
+        <button id="btn-run-view" class="px-3 py-2 bg-slate-100 rounded">Run</button>
+        <button id="btn-export-detail" class="px-3 py-2 bg-sky-600 text-white rounded">Download Detail CSV</button>
+        <button id="btn-export-ro-wise" class="hidden-el px-3 py-2 bg-sky-600 text-white rounded">Download RO-wise</button>
+        <button id="btn-export-cm-wise" class="hidden-el px-3 py-2 bg-sky-600 text-white rounded">Download CM-wise</button>
+        <button id="btn-export-ho-wise" class="hidden-el px-3 py-2 bg-sky-600 text-white rounded">Download HO-wise</button>
+      </div>
+      <div id="mapped-ro-list" class="hidden-el mt-3 text-xs text-slate-600"></div>
+      <div class="table-wrap border rounded mt-3">
+        <table id="view-table" class="min-w-full text-sm"></table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 pb-10 text-xs text-slate-500">
+    <div class="mt-8">© Bihar Gramin Bank • Centralized Adopters Tracking</div>
+  </footer>
+
+  <script>
+    // ========= CONFIG =========
+    const API_BASE = 'http://localhost:8080'; // ← change to your server URL in production
+    document.getElementById('env-api').textContent = API_BASE;
+
+    // ========= HELPERS =========
+    const qs = (s, el=document)=>el.querySelector(s);
+    const qsa = (s, el=document)=>Array.from(el.querySelectorAll(s));
+    const todayISO = ()=> new Date().toISOString().slice(0,10);
+    const slug = s => (s||'').toString().trim();
+    const download = (filename, blob)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500); };
+    const csvEscape = (v)=>{ const s=(v==null?'':String(v)); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+
+    function fillSelect(el, headers, guess=''){
+      el.innerHTML=''; const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='-- choose --'; el.appendChild(opt0);
+      headers.forEach(h=>{ const o=document.createElement('option'); o.value=h; o.textContent=h; if(guess===h) o.selected=true; el.appendChild(o); });
+    }
+    function guessHeader(headers, kws){ const lower=headers.map(h=>String(h).toLowerCase()); for(let i=0;i<lower.length;i++){ for(const kw of kws){ if(lower[i].includes(kw)) return headers[i]; } } return ''; }
+
+    // ========= SERVER API =========
+    let AUTH = { token:'', role:'', userId:'' };
+
+    async function api(path, opts={}){
+      const res = await fetch(API_BASE + path, {
+        headers: { 'Content-Type':'application/json', ...(AUTH.token? { 'Authorization': 'Bearer ' + AUTH.token } : {}) },
+        credentials:'include',
+        ...opts
+      });
+      if(!res.ok){ let txt=''; try{ txt=await res.text(); }catch{}; throw new Error(txt||('HTTP '+res.status)); }
+      const ct = res.headers.get('content-type')||''; return ct.includes('application/json')? res.json() : res.text();
+    }
+
+    async function login(role, userId, password){
+      const r = await api('/api/login', { method:'POST', body: JSON.stringify({ role, userId, password }) });
+      AUTH = { token:r.token, role:r.role, userId:r.userId };
+      return r;
+    }
+    const serverGetParams = ()=> api('/api/params');
+    const serverGetAdopters = ()=> api('/api/adopters');
+    const serverGetReports = (from, to, includeUnreported=true)=> api('/api/reports?'+ new URLSearchParams({from,to,includeUnreported:String(includeUnreported)}).toString());
+    const serverPostReports = (date, items)=> api('/api/reports', { method:'POST', body: JSON.stringify({ date, items }) });
+
+    // Admin endpoints
+    const adminPostAdopters = (rows)=> api('/api/adopters', { method:'POST', body: JSON.stringify({ rows }) });
+    const adminPostParams = (fields)=> api('/api/params', { method:'POST', body: JSON.stringify({ fields }) });
+    const adminGenerateUsers = ()=> api('/api/users/generate', { method:'POST' });
+    const meSetPassword = (newPassword)=> api('/api/me/password', { method:'POST', body: JSON.stringify({ newPassword }) });
+
+    async function fetchCSV(from, to, includeUnreported=true){
+      const res = await fetch(API_BASE + '/api/reports/export.csv?'+ new URLSearchParams({from,to,includeUnreported:String(includeUnreported)}), {
+        headers: { ...(AUTH.token? { 'Authorization': 'Bearer ' + AUTH.token } : {}) }
+      });
+      if(!res.ok) throw new Error('CSV export failed');
+      const blob = await res.blob();
+      return blob;
+    }
+
+    // ========= TABS =========
+    function show(panelId){ qsa('section[id^=panel-]').forEach(x=>x.classList.add('hidden-el')); qs(panelId).classList.remove('hidden-el'); }
+    qs('#tab-login').onclick = ()=> show('#panel-login');
+    qs('#tab-adopters').onclick = ()=> show('#panel-adopters');
+    qs('#tab-params').onclick = ()=> show('#panel-params');
+    qs('#tab-users').onclick = ()=> show('#panel-users');
+    qs('#tab-reports').onclick = ()=> show('#panel-reports');
+
+    // ========= LOGIN =========
+    qs('#btn-login').onclick = async ()=>{
+      const role=qs('#login-role').value; const user=slug(qs('#login-user').value); const pass=qs('#login-pass').value; const msg=qs('#login-msg'); msg.textContent='';
+      try{
+        await login(role, user, pass);
+        msg.className='text-sm text-emerald-700'; msg.textContent='Login successful';
+        qs('#whoami').classList.remove('hidden-el');
+        qs('#badge-role').textContent = `Role: ${AUTH.role}`;
+        qs('#badge-user').textContent = `User: ${AUTH.userId}`;
+        qs('#badge-date').textContent = todayISO();
+        qs('#change-pass').classList.remove('hidden-el');
+
+        // Role routing
+        if(AUTH.role==='RO'){
+          qs('#ro-reporting').classList.remove('hidden-el');
+          qs('#report-date').value = todayISO();
+          await buildROTable();
+          show('#panel-login');
+        } else {
+          // Open reports panel for HO/CM/Admin
+          await initReportsPanel();
+          show('#panel-reports');
+        }
+      }catch(e){ msg.className='text-sm text-rose-700'; msg.textContent = 'Login failed'; }
+    };
+
+    qs('#btn-set-pass').onclick = async ()=>{
+      const np = qs('#new-pass').value; if(!np){ alert('Enter new password.'); return; }
+      try{ await meSetPassword(np); qs('#pass-msg').classList.remove('hidden-el'); setTimeout(()=>qs('#pass-msg').classList.add('hidden-el'), 1200); qs('#new-pass').value=''; }catch(e){ alert('Failed to update password'); }
+    };
+
+    // ========= RO REPORTING =========
+    qs('#btn-load-my-branches').onclick = async ()=>{ await buildROTable(); };
+
+    async function buildROTable(){
+      const date = qs('#report-date').value || todayISO();
+      const tbl = qs('#report-table'); tbl.innerHTML='';
+
+      // Get mapping & params
+      const adop = await serverGetAdopters(); // scoped to RO
+      const params = (await serverGetParams()).fields || [];
+      // Existing values for this date
+      const data = await serverGetReports(date, date, true); // include unreported
+      const rows = (data.rows||[]).filter(r=> r.ro_id === AUTH.userId);
+
+      // Header
+      const fields = ['Branch','SOL','Region'].concat(params);
+      const thead=document.createElement('thead'); const trh=document.createElement('tr');
+      fields.forEach(h=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=h; trh.appendChild(th); }); thead.appendChild(trh); tbl.appendChild(thead);
+
+      const tbody=document.createElement('tbody');
+      adop.rows.forEach(m=>{
+        const tr=document.createElement('tr');
+        // Fixed cells
+        ;[m.branch, m.sol, m.region].forEach(val=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent=val; tr.appendChild(td); });
+        // Inputs
+        const existing = rows.find(r=> r.sol===m.sol && r.date===date) || {};
+        params.forEach(p=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; const inp=document.createElement('input'); inp.className='border rounded p-1 text-sm w-28'; inp.type='text'; inp.value = existing[p] ?? ''; inp.dataset.sol=m.sol; inp.dataset.param=p; td.appendChild(inp); tr.appendChild(td); });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      qs('#report-table-wrap').classList.remove('hidden-el');
+    }
+
+    qs('#btn-save-report').onclick = async ()=>{
+      const date = qs('#report-date').value || todayISO();
+      const inputs = qsa('#report-table input'); if(!inputs.length){ alert('Load branches first.'); return; }
+      // Consolidate per SOL
+      const bySol = {};
+      inputs.forEach(inp=>{ const sol=inp.dataset.sol; const p=inp.dataset.param; bySol[sol]=bySol[sol]||{ sol, data:{} }; bySol[sol].data[p]=inp.value; });
+      const items = Object.values(bySol);
+      try { await serverPostReports(date, items); alert('Saved for '+date); } catch(e){ alert('Save failed'); }
+    };
+
+    // ========= ADMIN: ADOPTERS UPLOAD =========
+    let adoptersSheet = [];
+    function renderPreview(tbl, json){ tbl.innerHTML=''; if(!json.length) return; const cols=Object.keys(json[0]); const thead=document.createElement('thead'); const trh=document.createElement('tr'); cols.forEach(c=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=c; trh.appendChild(th); }); thead.appendChild(trh); tbl.appendChild(thead); const tbody=document.createElement('tbody'); json.slice(0,10).forEach(r=>{ const tr=document.createElement('tr'); cols.forEach(c=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent=r[c]; tr.appendChild(td); }); tbody.appendChild(tr); }); tbl.appendChild(tbody); }
+
+    async function readExcel(file){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=e=>{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true}); resolve(json); }; fr.onerror=reject; fr.readAsArrayBuffer(file); }); }
+
+    qs('#btn-read-adopters').onclick = async ()=>{
+      if(AUTH.role!=='ADMIN'){ alert('Admin only'); return; }
+      const f = qs('#adopters-file').files[0]; if(!f){ alert('Choose Excel'); return; }
+      const json = await readExcel(f); adoptersSheet = json; const headers = json.length? Object.keys(json[0]) : [];
+      renderPreview(qs('#adopters-preview'), json); qs('#adopters-status').textContent = `Loaded ${json.length} row(s)`;
+      if(headers.length){
+        qs('#map-box').classList.remove('hidden-el');
+        fillSelect(qs('#map-ro-id'), headers, guessHeader(headers,['ro id','ro_user','ro code','ro login']));
+        fillSelect(qs('#map-cm-id'), headers, guessHeader(headers,['cm id','cm_user','chief manager id']));
+        fillSelect(qs('#map-ho-id'), headers, guessHeader(headers,['ho id','ho_user']));
+        fillSelect(qs('#map-cm-name'), headers, guessHeader(headers,['cm name','chief manager']));
+        fillSelect(qs('#map-ho-name'), headers, guessHeader(headers,['ho adopter','ho name']));
+        fillSelect(qs('#map-branch'), headers, guessHeader(headers,['branch name','branch']));
+        fillSelect(qs('#map-sol'), headers, guessHeader(headers,['sol id','sol','branch sol']));
+        fillSelect(qs('#map-region'), headers, guessHeader(headers,['region','ro name']));
+      }
+    };
+
+    qs('#btn-post-adopters').onclick = async ()=>{
+      if(AUTH.role!=='ADMIN'){ alert('Admin only'); return; }
+      const map = { roId:qs('#map-ro-id').value, cmId:qs('#map-cm-id').value, hoId:qs('#map-ho-id').value, cmName:qs('#map-cm-name').value, hoName:qs('#map-ho-name').value, branch:qs('#map-branch').value, sol:qs('#map-sol').value, region:qs('#map-region').value };
+      if(!map.roId||!map.cmId||!map.hoId||!map.branch||!map.sol||!map.region){ alert('Map all required fields.'); return; }
+      const rows = adoptersSheet.map(r=>({ ro_id:slug(r[map.roId]), cm_id:slug(r[map.cmId]), ho_id:slug(r[map.hoId]), cm_name:r[map.cmName]||'', ho_name:r[map.hoName]||'', branch:r[map.branch]||'', sol:String(r[map.sol]||''), region:r[map.region]||'' }));
+      try{ const resp = await adminPostAdopters(rows); qs('#post-adopters-msg').className='text-xs text-emerald-700'; qs('#post-adopters-msg').textContent = `Posted ${resp.inserted} rows ✔`; }catch(e){ qs('#post-adopters-msg').className='text-xs text-rose-700'; qs('#post-adopters-msg').textContent = 'Post failed'; }
+    };
+
+    // ========= ADMIN: PARAMETERS UPLOAD =========
+    let paramsFields = [];
+    qs('#btn-read-params').onclick = async ()=>{
+      if(AUTH.role!=='ADMIN'){ alert('Admin only'); return; }
+      const f=qs('#params-file').files[0]; if(!f){ alert('Choose PARAMETERS.xlsx'); return; }
+      const json = await readExcel(f); if(!json.length){ alert('No rows'); return; }
+      const keys = Object.keys(json[0]||{}).filter(k=>slug(k)&&!/^unnamed/i.test(k)); paramsFields = keys;
+      qs('#params-status').textContent = `Fields detected: ${paramsFields.length}`;
+      qs('#params-box').classList.remove('hidden-el');
+      qs('#params-list').innerHTML = '<div class="flex flex-wrap gap-2">'+paramsFields.map(k=>`<span class="pill bg-slate-100 px-3 py-1">${k}</span>`).join('')+'</div>';
+    };
+
+    qs('#btn-post-params').onclick = async ()=>{
+      if(AUTH.role!=='ADMIN'){ alert('Admin only'); return; }
+      try{ const r = await adminPostParams(paramsFields||[]); qs('#post-params-msg').className='text-xs text-emerald-700'; qs('#post-params-msg').textContent = `Posted ${r.count} fields ✔`; }catch(e){ qs('#post-params-msg').className='text-xs text-rose-700'; qs('#post-params-msg').textContent = 'Post failed'; }
+    };
+
+    // ========= ADMIN: GENERATE USERS =========
+    qs('#btn-generate-users').onclick = async ()=>{
+      if(AUTH.role!=='ADMIN'){ alert('Admin only'); return; }
+      try{ const r = await adminGenerateUsers(); qs('#gen-users-msg').className='text-xs text-emerald-700'; qs('#gen-users-msg').textContent = `Created ${r.created} user(s)`; }catch(e){ qs('#gen-users-msg').className='text-xs text-rose-700'; qs('#gen-users-msg').textContent='Failed'; }
+    };
+
+    // ========= REPORTS PANEL (HO/CM/Admin) =========
+    qs('#btn-run-view').onclick = ()=> runView();
+    qs('#btn-export-detail').onclick = async ()=>{
+      const { from, to } = getRangeRespectingRole();
+      try{ const blob = await fetchCSV(from, to, true); download(`bgb_${AUTH.role}_${AUTH.userId.replace(/\s+/g,'_')}_detail.csv`, blob); }catch(e){ alert('CSV export failed'); }
+    };
+    qs('#btn-export-ro-wise').onclick = async ()=>{ const d = await runView(true); const g = groupBy(d.rows, 'ro_id'); exportCSV(g.rows, g.fields, `${AUTH.role}_ROwise`); };
+    qs('#btn-export-cm-wise').onclick = async ()=>{ const d = await runView(true); const g = groupBy(d.rows, 'cm_id'); exportCSV(g.rows, g.fields, `${AUTH.role}_CMwise`); };
+    qs('#btn-export-ho-wise').onclick = async ()=>{ const d = await runView(true); const g = groupBy(d.rows, 'ho_id'); exportCSV(g.rows, g.fields, `${AUTH.role}_HOwise`); };
+
+    async function initReportsPanel(){
+      qs('#flt-from').value = todayISO();
+      qs('#flt-to').value = todayISO();
+      if(AUTH.role==='HO'){
+        qs('#date-controls').classList.add('hidden-el');
+        qs('#ho-today-note').classList.remove('hidden-el');
+      } else { qs('#date-controls').classList.remove('hidden-el'); qs('#ho-today-note').classList.add('hidden-el'); }
+      const isAdmin = AUTH.role==='ADMIN';
+      qs('#admin-scope').classList.toggle('hidden-el', !isAdmin);
+      qs('#btn-export-ro-wise').classList.toggle('hidden-el', AUTH.role==='HO');
+      qs('#btn-export-cm-wise').classList.toggle('hidden-el', AUTH.role==='HO');
+      qs('#btn-export-ho-wise').classList.toggle('hidden-el', !(isAdmin));
+      await runView();
+    }
+
+    function getRangeRespectingRole(){ let from = qs('#flt-from').value||todayISO(); let to = qs('#flt-to').value||todayISO(); if(AUTH.role==='HO'){ from = to = todayISO(); } return {from, to}; }
+
+    async function runView(returnData=false){
+      const {from,to} = getRangeRespectingRole();
+      const payload = await serverGetReports(from, to, true);
+      const rows = payload.rows||[];
+      const params = (payload.paramFields) || (await serverGetParams()).fields || [];
+
+      // HO summary of mapped ROs
+      if(AUTH.role==='HO'){
+        const rosMap = new Map();
+        rows.forEach(r=>{ const k=r.ro_id; const obj = rosMap.get(k)||{ total:0, reported:0 }; obj.total++; if(r._hasReport) obj.reported++; rosMap.set(k,obj); });
+        const html = Array.from(rosMap.entries()).map(([ro,v])=>`<span class='pill bg-slate-100 px-2 py-0.5 mr-1 mb-1 inline-block'>RO: <b>${ro}</b> • ${v.reported}/${v.total} rows today</span>`).join('');
+        const wrap = qs('#mapped-ro-list'); wrap.innerHTML = `<div class='text-xs'>Mapped ROs today:</div><div class='mt-1'>${html || '<i>No branches mapped.</i>'}</div>`; wrap.classList.remove('hidden-el');
+      } else { qs('#mapped-ro-list').classList.add('hidden-el'); }
+
+      // Build detail table
+      const tbl = qs('#view-table'); tbl.innerHTML='';
+      const fields = ['date','ro_id','cm_id','ho_id','branch','sol','region'].concat(params);
+      const thead=document.createElement('thead'); const trh=document.createElement('tr'); fields.forEach(h=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=h; trh.appendChild(th); }); thead.appendChild(trh); tbl.appendChild(thead);
+      const tbody=document.createElement('tbody'); rows.forEach(r=>{ const tr=document.createElement('tr'); fields.forEach(h=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent = r[h] ?? ''; tr.appendChild(td); }); tbody.appendChild(tr); }); tbl.appendChild(tbody);
+
+      if(returnData) return { rows, fields };
+    }
+
+    function groupBy(rows, key){
+      // Sum numeric parameter fields; keep only grouping key
+      const paramSet = new Set(); rows.forEach(r=>{ Object.keys(r).forEach(k=>{ if(!['date','ro_id','cm_id','ho_id','branch','sol','region','_hasReport','id','data_json'].includes(k)) paramSet.add(k); }); });
+      const params = Array.from(paramSet);
+      const map = new Map();
+      rows.forEach(r=>{
+        const k = r[key]||''; if(!map.has(k)) map.set(k, { [key]: k });
+        const acc = map.get(k);
+        params.forEach(p=>{ const v = parseFloat(String(r[p]??'').replace(/,/g,'')); if(!isNaN(v)) acc[p] = (acc[p]||0)+v; });
+      });
+      return { rows: Array.from(map.values()), fields: [key].concat(params) };
+    }
+
+    function exportCSV(rows, fields, name){ const csv=[fields.join(',')]; rows.forEach(r=> csv.push(fields.map(f=>csvEscape(r[f]??'')).join(',')) ); const blob=new Blob([csv.join('\n')],{type:'text/csv'}); download(`bgb_${name}.csv`, blob); }
+
+    // ========= BOOT =========
+    (function boot(){
+      qs('#env-api').textContent = API_BASE;
+      qs('#report-date').value = todayISO();
+    })();
+  </script>
+</body>
+</html>

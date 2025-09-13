@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bihar Gramin Bank – Adopters Tracking System (Reporting • Show Unreported)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    html, body { height: 100%; }
+    .hidden-el { display:none; }
+    .pill { border-radius: 9999px; }
+    .card { border-radius: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    th, td { white-space: nowrap; }
+    .table-wrap { overflow: auto; max-height: 60vh; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-50 via-emerald-50 to-white text-slate-800">
+  <header class="w-full border-b bg-white/70 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+      <h1 class="text-xl font-semibold">Bihar Gramin Bank – Adopters Tracking System</h1>
+      <span class="ml-auto pill bg-slate-100 px-3 py-1 text-xs">Reporting • HO/CM show mapped SOL even if no report</span>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <!-- Tabs -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <button id="tab-adopters" class="px-4 py-3 card bg-white border">1) Upload Adopters Excel</button>
+      <button id="tab-params" class="px-4 py-3 card bg-white border">2) Upload Parameters</button>
+      <button id="tab-generate" class="px-4 py-3 card bg-white border">3) Generate Users</button>
+      <button id="tab-login" class="px-4 py-3 card bg-white border">4) Login</button>
+      <button id="tab-admin" class="px-4 py-3 card bg-white border">Admin / Backup</button>
+    </div>
+
+    <!-- Upload Adopters -->
+    <section id="panel-adopters" class="card bg-white p-5">
+      <h2 class="text-lg font-semibold mb-2">Upload Adopters Excel & Map</h2>
+      <p class="text-sm text-slate-600 mb-4">Upload the master mapping (RO/CM/HO User IDs, Branch, SOL, Region). This powers logins, access control, and HO/CM views.</p>
+      <div class="flex flex-wrap gap-3 items-center">
+        <input id="adopters-file" type="file" accept=".xlsx,.xls" class="text-sm"/>
+        <button id="btn-read-adopters" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Read Excel</button>
+        <span id="adopters-status" class="text-xs text-slate-500">No file.</span>
+      </div>
+      <div id="map-box" class="mt-6 hidden-el">
+        <h3 class="font-medium mb-2">Column Mapping</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div><label class="text-sm">RO USER ID</label><select id="map-ro-id" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">CM USER ID</label><select id="map-cm-id" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">HO USER ID</label><select id="map-ho-id" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">CM NAME</label><select id="map-cm-name" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">HO ADOPTER NAME</label><select id="map-ho-name" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">BRANCH NAME</label><select id="map-branch" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">BRANCH SOL</label><select id="map-sol" class="w-full border rounded p-2 text-sm"></select></div>
+          <div><label class="text-sm">REGION</label><select id="map-region" class="w-full border rounded p-2 text-sm"></select></div>
+        </div>
+        <div class="mt-4">
+          <button id="btn-save-map" class="px-4 py-2 bg-emerald-600 text-white rounded-lg">Save Mapping</button>
+          <span id="map-saved" class="text-xs text-emerald-700 hidden-el ml-2">Saved ✓</span>
+        </div>
+        <div class="mt-6">
+          <h4 class="font-medium mb-2">Preview (first 10 rows)</h4>
+          <div class="overflow-auto border rounded"><table id="adopters-preview" class="min-w-full text-sm"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Upload Parameters -->
+    <section id="panel-params" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Upload Daily Reporting Parameters</h2>
+      <p class="text-sm text-slate-600 mb-4">Attach <b>PARAMETERS.xlsx</b>. The first non-empty header row becomes the field names (APY, JBY, etc.).</p>
+      <div class="flex flex-wrap gap-3 items-center">
+        <input id="params-file" type="file" accept=".xlsx,.xls" class="text-sm"/>
+        <button id="btn-read-params" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Read Parameters</button>
+        <span id="params-status" class="text-xs text-slate-500">No file.</span>
+      </div>
+      <div id="params-box" class="mt-6 hidden-el">
+        <h4 class="font-medium mb-2">Detected Fields</h4>
+        <div id="params-list" class="text-sm text-slate-700"></div>
+      </div>
+    </section>
+
+    <!-- Generate Users -->
+    <section id="panel-generate" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Generate Login Accounts</h2>
+      <p class="text-sm text-slate-600">Creates unique RO/CM/HO logins (duplicates merged). Default password = user id. Admin: <b>MADHAV JHA / MADHAV JHA</b>.</p>
+      <div class="flex gap-2 mt-2">
+        <button id="btn-generate" class="px-4 py-2 bg-sky-600 text-white rounded-lg">Create / Refresh Users</button>
+        <button id="btn-wipe-users" class="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg">Reset Users</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <div class="border rounded p-4"><div class="text-sm text-slate-500">RO accounts</div><div id="count-ro" class="text-2xl font-semibold">0</div></div>
+        <div class="border rounded p-4"><div class="text-sm text-slate-500">CM accounts</div><div id="count-cm" class="text-2xl font-semibold">0</div></div>
+        <div class="border rounded p-4"><div class="text-sm text-slate-500">HO accounts</div><div id="count-ho" class="text-2xl font-semibold">0</div></div>
+      </div>
+    </section>
+
+    <!-- Login / Dashboards -->
+    <section id="panel-login" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Login</h2>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <div>
+          <label class="text-sm font-medium">Role</label>
+          <select id="login-role" class="w-full border rounded p-2 text-sm">
+            <option value="RO">RO</option>
+            <option value="CM">CM</option>
+            <option value="HO">HO</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-medium">User ID</label>
+          <input id="login-user" class="w-full border rounded p-2 text-sm" placeholder="Enter User ID" />
+        </div>
+        <div>
+          <label class="text-sm font-medium">Password</label>
+          <input id="login-pass" type="password" class="w-full border rounded p-2 text-sm" />
+        </div>
+        <button id="btn-login" class="px-4 py-2 bg-emerald-600 text-white rounded-lg">Sign in</button>
+      </div>
+      <p id="login-msg" class="text-sm mt-3"></p>
+
+      <!-- Shared header -->
+      <div id="dash" class="hidden-el mt-6">
+        <div class="flex flex-wrap items-center gap-2">
+          <div id="badge-role" class="pill px-3 py-1 bg-slate-100 text-xs"></div>
+          <div id="badge-user" class="pill px-3 py-1 bg-slate-100 text-xs"></div>
+          <div class="ml-auto text-xs text-slate-500">Today: <span id="badge-date"></span></div>
+        </div>
+
+        <!-- RO Reporting -->
+        <div id="ro-reporting" class="hidden-el mt-6">
+          <h3 class="text-lg font-semibold">Daily Reporting (RO)</h3>
+          <div class="flex flex-wrap gap-2 items-center mt-2">
+            <label class="text-sm">Date</label>
+            <input id="report-date" type="date" class="border rounded p-1 text-sm" />
+            <button id="btn-load-my-branches" class="px-3 py-1.5 bg-slate-100 rounded">Load Branches</button>
+            <button id="btn-save-report" class="px-3 py-1.5 bg-sky-600 text-white rounded">Save Today’s Report</button>
+          </div>
+          <div id="report-table-wrap" class="table-wrap border rounded mt-3 hidden-el">
+            <table id="report-table" class="min-w-full text-sm"></table>
+          </div>
+        </div>
+
+        <!-- HO/CM/Admin Views -->
+        <div id="views" class="hidden-el mt-6">
+          <h3 id="view-title" class="text-lg font-semibold">Reports</h3>
+          <div class="flex flex-wrap gap-2 items-end text-sm mt-2">
+            <div id="date-controls" class="flex gap-2 items-end">
+              <div>
+                <label class="text-xs">From</label>
+                <input id="flt-from" type="date" class="border rounded p-1"/>
+              </div>
+              <div>
+                <label class="text-xs">To</label>
+                <input id="flt-to" type="date" class="border rounded p-1"/>
+              </div>
+            </div>
+            <div id="ho-today-note" class="hidden-el text-xs pill bg-slate-100 px-2 py-1">HO view is fixed to <b>today</b></div>
+            <div id="admin-scope" class="hidden-el flex gap-2 items-center">
+              <label class="text-xs">Scope</label>
+              <select id="scope" class="border rounded p-1">
+                <option value="RO">RO User-wise</option>
+                <option value="HO">HO User-wise</option>
+                <option value="CM">CM User-wise</option>
+              </select>
+            </div>
+            <button id="btn-run-view" class="px-3 py-1.5 bg-slate-100 rounded">Run</button>
+            <button id="btn-export-view" class="px-3 py-1.5 bg-sky-600 text-white rounded">Download CSV</button>
+            <button id="btn-export-ro-wise" class="hidden-el px-3 py-1.5 bg-sky-600 text-white rounded">Download RO-wise</button>
+            <button id="btn-export-cm-wise" class="hidden-el px-3 py-1.5 bg-sky-600 text-white rounded">Download CM-wise</button>
+          </div>
+          <div id="mapped-ro-list" class="hidden-el mt-3 text-xs text-slate-600"></div>
+          <div class="table-wrap border rounded mt-3">
+            <table id="view-table" class="min-w-full text-sm"></table>
+          </div>
+        </div>
+
+        <div class="mt-4 flex gap-2">
+          <button id="btn-logout" class="px-3 py-1.5 bg-slate-100 rounded text-sm">Logout</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin / Backup -->
+    <section id="panel-admin" class="card bg-white p-5 hidden-el">
+      <h2 class="text-lg font-semibold mb-2">Admin & Backups</h2>
+      <div class="flex flex-wrap gap-2">
+        <button id="btn-export-db" class="px-4 py-2 bg-slate-800 text-white rounded">Download DB (JSON)</button>
+        <label class="px-4 py-2 bg-slate-100 rounded cursor-pointer">
+          <input id="import-db" type="file" accept="application/json" class="hidden"/>
+          Restore DB (JSON)
+        </label>
+        <button id="btn-clear-everything" class="px-4 py-2 bg-rose-100 text-rose-700 rounded">Clear Everything</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // LocalStorage keys (v4)
+    const LS = {
+      MAP: 'bgb_map_v4',
+      ROWS: 'bgb_rows_v4',
+      USERS: 'bgb_users_v4',
+      PASS: 'bgb_pass_v4',
+      PARAMS: 'bgb_params_v4',
+      REPORTS: 'bgb_reports_v4' // array of report rows
+    };
+
+    // Shortcuts
+    const qs = (s, el=document)=>el.querySelector(s);
+    const qsa = (s, el=document)=>Array.from(el.querySelectorAll(s));
+    const todayISO = ()=> new Date().toISOString().slice(0,10);
+    const slug = s => (s||'').toString().trim();
+
+    // Persistence helpers
+    const save = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
+    const load = (k, def)=>{ try { return JSON.parse(localStorage.getItem(k) || JSON.stringify(def)); } catch(e){ return def; } };
+
+    // Utilities
+    function download(filename, content, mime='text/plain'){ const b=new Blob([content],{type:mime}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); }
+    function csvEscape(val){ const s = (val==null?'':String(val)); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+
+    // Global state
+    let headers = [];
+    let rows = [];
+    let paramFields = []; // ["APY","JBY",...]
+    let currentSession = null; // {role, userId}
+
+    // Tab switching
+    function show(panelId){ qsa('section[id^=panel-]').forEach(x=>x.classList.add('hidden-el')); qs(panelId).classList.remove('hidden-el'); }
+    qs('#tab-adopters').onclick=()=>show('#panel-adopters');
+    qs('#tab-params').onclick=()=>show('#panel-params');
+    qs('#tab-generate').onclick=()=>show('#panel-generate');
+    qs('#tab-login').onclick=()=>show('#panel-login');
+    qs('#tab-admin').onclick=()=>show('#panel-admin');
+
+    // ----- Adopters Excel -----
+    function renderPreview(tbl, json){ tbl.innerHTML=''; if(!json.length) return; const cols=Object.keys(json[0]); const thead=document.createElement('thead'); const trh=document.createElement('tr'); cols.forEach(c=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=c; trh.appendChild(th); }); thead.appendChild(trh); tbl.appendChild(thead); const tbody=document.createElement('tbody'); json.slice(0,10).forEach(r=>{ const tr=document.createElement('tr'); cols.forEach(c=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent=r[c]; tr.appendChild(td); }); tbody.appendChild(tr); }); tbl.appendChild(tbody); }
+    function fillSelect(el, headers, guess=''){ el.innerHTML=''; const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='-- choose --'; el.appendChild(opt0); headers.forEach(h=>{ const o=document.createElement('option'); o.value=h; o.textContent=h; if(guess===h) o.selected=true; el.appendChild(o); }); }
+
+    qs('#btn-read-adopters').onclick = async () => {
+      const f = qs('#adopters-file').files[0]; if(!f){ alert('Select adopters Excel first.'); return; }
+      const json = await readExcel(f); rows = json; headers = rows.length? Object.keys(rows[0]) : []; save(LS.ROWS, rows); renderPreview(qs('#adopters-preview'), rows); qs('#adopters-status').textContent = `Loaded ${rows.length} row(s)`; if(headers.length){ qs('#map-box').classList.remove('hidden-el'); }
+      fillSelect(qs('#map-ro-id'), headers, guessHeader(headers,['ro id','ro_user','ro code','ro login','rouser']));
+      fillSelect(qs('#map-cm-id'), headers, guessHeader(headers,['cm id','cm_user','chief manager id','cm login']));
+      fillSelect(qs('#map-ho-id'), headers, guessHeader(headers,['ho id','ho_user','ho login']));
+      fillSelect(qs('#map-cm-name'), headers, guessHeader(headers,['cm name','chief manager']));
+      fillSelect(qs('#map-ho-name'), headers, guessHeader(headers,['ho adopter','ho name']));
+      fillSelect(qs('#map-branch'), headers, guessHeader(headers,['branch name','branch']));
+      fillSelect(qs('#map-sol'), headers, guessHeader(headers,['sol id','sol','branch sol']));
+      fillSelect(qs('#map-region'), headers, guessHeader(headers,['region','ro name']));
+    };
+
+    function guessHeader(headers, kws){ const lower=headers.map(h=>h.toLowerCase()); for(let i=0;i<lower.length;i++){ for(const kw of kws){ if(lower[i].includes(kw)) return headers[i]; } } return ''; }
+
+    qs('#btn-save-map').onclick = ()=>{
+      const map = { roId: qs('#map-ro-id').value, cmId: qs('#map-cm-id').value, hoId: qs('#map-ho-id').value, cmName: qs('#map-cm-name').value, hoName: qs('#map-ho-name').value, branch: qs('#map-branch').value, sol: qs('#map-sol').value, region: qs('#map-region').value };
+      if(!map.roId||!map.cmId||!map.hoId||!map.branch||!map.sol||!map.region){ alert('Map all required fields.'); return; }
+      save(LS.MAP, map); qs('#map-saved').classList.remove('hidden-el'); setTimeout(()=>qs('#map-saved').classList.add('hidden-el'),1200);
+    };
+
+    async function readExcel(file){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=e=>{ const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true}); resolve(json); }; fr.onerror=reject; fr.readAsArrayBuffer(file); }); }
+
+    // ----- Parameters Excel -----
+    qs('#btn-read-params').onclick = async ()=>{
+      const f=qs('#params-file').files[0]; if(!f){ alert('Select PARAMETERS.xlsx'); return; }
+      const json=await readExcel(f); if(!json.length){ alert('No rows found in PARAMETERS.xlsx'); return; }
+      const keys=Object.keys(json[0]||{}).filter(k=>slug(k)&&!/^unnamed/i.test(k)); paramFields = keys; save(LS.PARAMS, paramFields); qs('#params-status').textContent = `Fields detected: ${paramFields.length}`; qs('#params-box').classList.remove('hidden-el'); qs('#params-list').innerHTML = '<div class="flex flex-wrap gap-2">'+paramFields.map(k=>`<span class="pill bg-slate-100 px-3 py-1">${k}</span>`).join('')+'</div>';
+    };
+
+    // ----- Users -----
+    function buildUsers(){ const map=load(LS.MAP,{}); const r=load(LS.ROWS,[]); if(!r.length) { alert('Upload & map adopters Excel first.'); return null; } const users={RO:{},CM:{},HO:{}}; r.forEach(row=>{ const ro=slug(row[map.roId]); const cm=slug(row[map.cmId]); const ho=slug(row[map.hoId]); if(ro){ users.RO[ro] = users.RO[ro]||{userId:ro, role:'RO'}; } if(cm){ users.CM[cm] = users.CM[cm]||{userId:cm, role:'CM', name:row[map.cmName]||''}; } if(ho){ users.HO[ho] = users.HO[ho]||{userId:ho, role:'HO', name:row[map.hoName]||''}; } }); return users; }
+    function refreshCounts(){ const u=load(LS.USERS,{}); qs('#count-ro').textContent=u.RO?Object.keys(u.RO).length:0; qs('#count-cm').textContent=u.CM?Object.keys(u.CM).length:0; qs('#count-ho').textContent=u.HO?Object.keys(u.HO).length:0; }
+    qs('#btn-generate').onclick=()=>{ const u=buildUsers(); if(!u) return; save(LS.USERS,u); const p=load(LS.PASS,{}); ['RO','CM','HO'].forEach(role=>{ Object.keys(u[role]).forEach(id=>{ p[role]=p[role]||{}; if(!p[role][id]) p[role][id]=id; }); }); save(LS.PASS,p); refreshCounts(); alert('Users generated.'); };
+    qs('#btn-wipe-users').onclick=()=>{ localStorage.removeItem(LS.USERS); localStorage.removeItem(LS.PASS); refreshCounts(); alert('Users reset.'); };
+
+    // ----- Login & Dashboards -----
+    qs('#btn-login').onclick=()=>{
+      const role=qs('#login-role').value; const user=slug(qs('#login-user').value); const pw=qs('#login-pass').value; const users=load(LS.USERS,{}); const pass=load(LS.PASS,{}); const msg=qs('#login-msg'); msg.textContent='';
+      if(role==='ADMIN'){
+        if(user==='MADHAV JHA' && pw==='MADHAV JHA'){ currentSession={role,userId:user}; afterLogin(); msg.textContent='Admin login successful'; msg.className='text-sm text-emerald-700'; return; }
+        msg.textContent='Invalid Admin credentials'; msg.className='text-sm text-rose-700'; return;
+      }
+      if(!users?.[role]?.[user]){ msg.textContent='User not found. Generate users or check User ID.'; msg.className='text-sm text-rose-700'; return; }
+      if(pass?.[role]?.[user]!==pw){ msg.textContent='Wrong password (default = user id).'; msg.className='text-sm text-rose-700'; return; }
+      currentSession={role,userId:user}; afterLogin(); msg.textContent='Login successful'; msg.className='text-sm text-emerald-700';
+    };
+
+    qs('#btn-logout').onclick=()=>{ currentSession=null; qs('#dash').classList.add('hidden-el'); };
+
+    function afterLogin(){
+      qs('#badge-role').textContent = `Role: ${currentSession.role}`;
+      qs('#badge-user').textContent = `User: ${currentSession.userId}`;
+      qs('#badge-date').textContent = todayISO();
+      qs('#dash').classList.remove('hidden-el');
+
+      // Reset sections
+      qs('#ro-reporting').classList.add('hidden-el');
+      qs('#views').classList.add('hidden-el');
+      qs('#admin-scope').classList.add('hidden-el');
+      qs('#ho-today-note').classList.add('hidden-el');
+      qs('#date-controls').classList.remove('hidden-el');
+      qs('#btn-export-ro-wise').classList.add('hidden-el');
+      qs('#btn-export-cm-wise').classList.add('hidden-el');
+      qs('#mapped-ro-list').classList.add('hidden-el');
+
+      if(currentSession.role==='RO'){
+        qs('#ro-reporting').classList.remove('hidden-el');
+        qs('#report-date').value = todayISO();
+      } else {
+        // HO / CM / ADMIN – Reports view
+        qs('#views').classList.remove('hidden-el');
+        qs('#flt-from').value = todayISO();
+        qs('#flt-to').value = todayISO();
+
+        if(currentSession.role==='ADMIN'){
+          qs('#admin-scope').classList.remove('hidden-el');
+          qs('#view-title').textContent = 'Admin – All Reports (includes unreported SOL)';
+        } else if(currentSession.role==='HO'){
+          qs('#view-title').textContent = 'HO – RO Daily Reporting (Today • includes unreported SOL)';
+          // HO fixed to today
+          qs('#date-controls').classList.add('hidden-el');
+          qs('#ho-today-note').classList.remove('hidden-el');
+        } else if(currentSession.role==='CM'){
+          qs('#view-title').textContent = 'CM – HO & RO Daily Reporting (includes unreported SOL)';
+          qs('#btn-export-ro-wise').classList.remove('hidden-el');
+          qs('#btn-export-cm-wise').classList.remove('hidden-el');
+        }
+      }
+    }
+
+    // ----- RO Reporting UI -----
+    qs('#btn-load-my-branches').onclick = ()=>{ const map=load(LS.MAP,{}); const r=load(LS.ROWS,[]); const date=qs('#report-date').value||todayISO(); const my = r.filter(x=> slug(x[map.roId])===currentSession.userId); renderReportingTable(my, map, date); };
+
+    function renderReportingTable(myRows, map, date){
+      const tbl = qs('#report-table'); tbl.innerHTML='';
+      if(!myRows.length){ tbl.innerHTML='<tbody><tr><td class="px-3 py-2">No branches mapped.</td></tr></tbody>'; qs('#report-table-wrap').classList.remove('hidden-el'); return; }
+      const thead=document.createElement('thead'); const trh=document.createElement('tr');
+      ;['Branch','SOL','Region'].forEach(h=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=h; trh.appendChild(th); });
+      paramFields = load(LS.PARAMS, paramFields);
+      paramFields.forEach(p=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=p; trh.appendChild(th); });
+      thead.appendChild(trh); tbl.appendChild(thead);
+
+      const tbody=document.createElement('tbody'); const saved = load(LS.REPORTS, []);
+      myRows.forEach(row=>{
+        const tr=document.createElement('tr');
+        ;[row[map.branch], row[map.sol], row[map.region]].forEach(val=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent=val; tr.appendChild(td); });
+        paramFields.forEach(p=>{
+          const td=document.createElement('td'); td.className='px-3 py-2 border-b'; const inp=document.createElement('input'); inp.className='border rounded p-1 text-sm w-28'; inp.type='text';
+          const existing = saved.find(x=> x.date===date && x.roId===slug(row[map.roId]) && x.sol===row[map.sol]); if(existing && (p in existing)) inp.value = existing[p];
+          inp.dataset.sol = row[map.sol]; inp.dataset.param = p; inp.dataset.roId = slug(row[map.roId]); inp.dataset.cmId = slug(row[map.cmId]); inp.dataset.hoId = slug(row[map.hoId]); inp.dataset.branch = row[map.branch]; inp.dataset.region = row[map.region];
+          td.appendChild(inp); tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      qs('#report-table-wrap').classList.remove('hidden-el');
+    }
+
+    qs('#btn-save-report').onclick = ()=>{
+      const date = qs('#report-date').value || todayISO(); const inputs = qsa('#report-table input'); if(!inputs.length){ alert('Load branches first.'); return; }
+      const reports = load(LS.REPORTS, []); const roIdNow = currentSession.userId;
+      for(let i=reports.length-1;i>=0;i--){ if(reports[i].date===date && reports[i].roId===roIdNow){ reports.splice(i,1); } }
+      const bySol = {}; inputs.forEach(inp=>{ const key = inp.dataset.sol; bySol[key] = bySol[key] || { date, roId: inp.dataset.roId, cmId: inp.dataset.cmId, hoId: inp.dataset.hoId, sol: inp.dataset.sol, branch: inp.dataset.branch, region: inp.dataset.region }; bySol[key][inp.dataset.param] = inp.value; });
+      Object.values(bySol).forEach(obj=>reports.push(obj)); save(LS.REPORTS, reports); alert('Daily report saved for '+date);
+    };
+
+    // Helpers for HO/CM/Admin views
+    function enumerateDates(from, to){ const out=[]; const s=new Date(from); const e=new Date(to); while(s<=e){ out.push(s.toISOString().slice(0,10)); s.setDate(s.getDate()+1); } return out; }
+
+    function buildBaseRows(role, id, map, r, dates){
+      // Base mapping rows per date (so unreported SOL still show)
+      let baseMap = [];
+      if(role==='HO') baseMap = r.filter(x=> slug(x[map.hoId])===id);
+      else if(role==='CM') baseMap = r.filter(x=> slug(x[map.cmId])===id);
+      else if(role==='RO') baseMap = r.filter(x=> slug(x[map.roId])===id);
+      else baseMap = r.slice(); // Admin default (not used)
+
+      const params = load(LS.PARAMS, []);
+      const base=[];
+      dates.forEach(d=>{
+        baseMap.forEach(row=>{
+          const obj = { date:d, roId: slug(row[map.roId]), cmId: slug(row[map.cmId]), hoId: slug(row[map.hoId]), branch: row[map.branch], sol: row[map.sol], region: row[map.region], _hasReport:false };
+          params.forEach(p=>{ obj[p] = ''; });
+          base.push(obj);
+        });
+      });
+      return base;
+    }
+
+    function overlayReports(base, reports){
+      // Overlay report values onto base rows (matching by date+sol)
+      const index = new Map();
+      base.forEach((b,i)=> index.set(b.date+'|'+b.sol, i));
+      reports.forEach(rep=>{
+        const key = (rep.date||'')+'|'+(rep.sol||'');
+        const i = index.get(key);
+        if(i!=null){
+          const target = base[i];
+          Object.keys(rep).forEach(k=>{ if(k!=='date'&&k!=='roId'&&k!=='cmId'&&k!=='hoId'&&k!=='sol'&&k!=='branch'&&k!=='region'){ target[k] = rep[k]; } });
+          target._hasReport = true;
+        }
+      });
+      return base;
+    }
+
+    // ----- Views (HO / CM / ADMIN) -----
+    qs('#btn-run-view').onclick = ()=>{ runView(); };
+    qs('#btn-export-view').onclick = ()=>{ const data = runView(true); if(!data.rows.length){ alert('Nothing to export.'); return; } exportCSV(data.rows, data.fields, `${currentSession.role}_${currentSession.userId.replace(/\s+/g,'_')}_detail`); };
+    qs('#btn-export-ro-wise').onclick = ()=>{ const data = runView(true); if(!data.rows.length){ alert('Nothing to export.'); return; } const g = groupBy(data.rows, 'roId'); exportCSV(g.rows, g.fields, `${currentSession.role}_${currentSession.userId.replace(/\s+/g,'_')}_ROwise`); };
+    qs('#btn-export-cm-wise').onclick = ()=>{ const data = runView(true); if(!data.rows.length){ alert('Nothing to export.'); return; } const g = groupBy(data.rows, 'cmId'); exportCSV(g.rows, g.fields, `${currentSession.role}_${currentSession.userId.replace(/\s+/g,'_')}_CMwise`); };
+
+    function runView(returnData=false){
+      const map=load(LS.MAP,{}); const r=load(LS.ROWS,[]); const reports=load(LS.REPORTS,[]); const role=currentSession.role; const id=currentSession.userId;
+      let from = qs('#flt-from').value||todayISO(); let to=qs('#flt-to').value||todayISO();
+      if(role==='HO'){ from = todayISO(); to = todayISO(); }
+      const dates = enumerateDates(from,to);
+
+      // Filter reports to date range + access scope
+      let filtered = reports.filter(rep=> dates.includes(rep.date));
+      if(role==='HO'){ filtered = filtered.filter(rep=> slug(rep.hoId)===id); }
+      if(role==='CM'){ filtered = filtered.filter(rep=> slug(rep.cmId)===id); }
+      if(role==='RO'){ filtered = filtered.filter(rep=> slug(rep.roId)===id); }
+
+      // Base rows from mapping regardless of reporting
+      const base = buildBaseRows(role,id,map,r,dates);
+      const merged = overlayReports(base, filtered);
+
+      // HO: summary of mapped ROs with reported/total
+      if(role==='HO'){
+        const rosTotal = new Map();
+        merged.forEach(row=>{ const key=row.roId; rosTotal.set(key,(rosTotal.get(key)||{total:0,reported:0})); const agg=rosTotal.get(key); agg.total+=1; if(row._hasReport) agg.reported+=1; });
+        const list = Array.from(rosTotal.entries()).map(([ro,v])=>`<span class='pill bg-slate-100 px-2 py-0.5 mr-1 mb-1 inline-block'>RO: <b>${ro}</b> • ${v.reported}/${v.total} rows today</span>`).join('');
+        const wrap = qs('#mapped-ro-list'); wrap.innerHTML = `<div class='text-xs'>Mapped ROs today:</div><div class='mt-1'>${list||'<i>No branches mapped.</i>'}</div>`; wrap.classList.remove('hidden-el');
+      }
+
+      // Render detail table
+      const tbl = qs('#view-table'); tbl.innerHTML='';
+      const fields = ['date','roId','cmId','hoId','branch','sol','region'].concat(load(LS.PARAMS,[]));
+      const thead=document.createElement('thead'); const trh=document.createElement('tr'); fields.forEach(h=>{ const th=document.createElement('th'); th.className='px-3 py-2 border-b bg-slate-50'; th.textContent=h; trh.appendChild(th); }); thead.appendChild(trh); tbl.appendChild(thead);
+      const tbody=document.createElement('tbody'); merged.forEach(row=>{ const tr=document.createElement('tr'); fields.forEach(h=>{ const td=document.createElement('td'); td.className='px-3 py-2 border-b'; td.textContent = row[h] ?? ''; tr.appendChild(td); }); tbody.appendChild(tr); }); tbl.appendChild(tbody);
+
+      if(returnData) return { rows: merged, fields };
+    }
+
+    function groupBy(rows, key){
+      const params = load(LS.PARAMS, []);
+      const map = new Map();
+      rows.forEach(r=>{
+        const k = r[key]||''; if(!map.has(k)) map.set(k, { [key]: k });
+        const acc = map.get(k);
+        // Sum numeric params
+        params.forEach(p=>{ const v = parseFloat(String(r[p]??'').replace(/,/g,'')); if(!isNaN(v)) acc[p] = (acc[p]||0)+v; });
+      });
+      const outRows = Array.from(map.values());
+      const outFields = [key].concat(params);
+      return { rows: outRows, fields: outFields };
+    }
+
+    function exportCSV(rows, fields, name){ const csv=[fields.join(',')]; rows.forEach(r=>{ csv.push(fields.map(f=>csvEscape(r[f]??'')).join(',')); }); download(`bgb_${name}.csv`, csv.join('\n'), 'text/csv'); }
+
+    // ----- Admin / Backup -----
+    qs('#btn-export-db').onclick=()=>{ const payload={ map:load(LS.MAP,{}), rows:load(LS.ROWS,[]), users:load(LS.USERS,{}), pass:load(LS.PASS,{}), params:load(LS.PARAMS,[]), reports:load(LS.REPORTS,[]) }; download('bgb_backup.json', JSON.stringify(payload,null,2),'application/json'); };
+    qs('#import-db').onchange=async (e)=>{ const f=e.target.files[0]; if(!f) return; try{ const text=await f.text(); const j=JSON.parse(text); if(j.map) save(LS.MAP,j.map); if(j.rows) save(LS.ROWS,j.rows); if(j.users) save(LS.USERS,j.users); if(j.pass) save(LS.PASS,j.pass); if(j.params) save(LS.PARAMS,j.params); if(j.reports) save(LS.REPORTS,j.reports); alert('DB restored.'); } catch(err){ alert('Invalid JSON'); } e.target.value=''; };
+    qs('#btn-clear-everything').onclick=()=>{ if(confirm('This clears adopters, users, params, reports. Continue?')){ Object.values(LS).forEach(k=>localStorage.removeItem(k)); alert('Cleared.'); } };
+
+    // Boot
+    (function boot(){ refreshCounts(); })();
+  </script>
+</body>
+</html>
